@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useToast } from "@/components/ui/use-toast"
 import { verifyCameraResponse } from './camera-control'
+import { updateCurrentSettings } from './state'
 
 interface WebSocketContextType {
   status: string
@@ -21,6 +22,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     
     ws.onopen = () => {
       console.log('WebSocket connection established')
+      // Optionally send a test message to verify
+      ws.send(JSON.stringify({ test: 'connection' }));
     }
 
     ws.onclose = () => {
@@ -32,36 +35,40 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     }
     
     ws.onmessage = (event) => {
-      console.log('\nReceived WebSocket message:', event.data)
-      const data = JSON.parse(event.data)
+      console.log('\nReceived WebSocket message:', event.data);
+      const data = JSON.parse(event.data);
+      console.log('Parsed message data:', data); // Log the parsed data
       
       if (data.topic?.startsWith('caminq.camera')) {
         const cameraNumber = parseInt(data.topic.replace('caminq.camera', ''))
         console.log(`Processing camera inquiry response for camera ${cameraNumber}:`, data.payload)
+        // Log the received payload
+        console.log('Received payload:', data.payload);
         
-        // Parse all values as integers
-        currentCameraSettings = {
+        // Update current settings with parsed integers
+        updateCurrentSettings({
           ExposureMode: data.payload.ExposureMode,
           ExposureIris: Math.round(Number(data.payload.ExposureIris)),
           ExposureGain: Math.round(Number(data.payload.ExposureGain)),
           ExposureExposureTime: Math.round(Number(data.payload.ExposureExposureTime)),
           DigitalBrightLevel: Math.round(Number(data.payload.DigitalBrightLevel))
-        }
-        console.log('Parsed camera settings:', currentCameraSettings)
+        });
+        console.log('Parsed camera settings:', data.payload);
         
-        const isVerified = verifyCameraResponse(cameraNumber, currentCameraSettings)
+        // Call verifyCameraResponse
+        const isVerified = verifyCameraResponse(cameraNumber, data.payload);
         
         if (!isVerified) {
-          console.warn(`Settings mismatch detected for camera ${cameraNumber}`)
+          console.warn(`Settings mismatch detected for camera ${cameraNumber}`);
           toast({
             title: `Camera ${cameraNumber} Settings Mismatch`,
             description: "Received settings do not match sent values",
             variant: "destructive",
-          })
-          setStatus(`Settings mismatch detected for Camera ${cameraNumber}`)
+          });
+          setStatus(`Settings mismatch detected for Camera ${cameraNumber}`);
         } else {
-          console.log(`Settings verified for camera ${cameraNumber}`)
-          setStatus(`Settings verified for Camera ${cameraNumber}`)
+          console.log(`Settings verified for camera ${cameraNumber}`);
+          setStatus(`Settings verified for Camera ${cameraNumber}`);
         }
       }
     }

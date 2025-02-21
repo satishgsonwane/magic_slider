@@ -1,31 +1,31 @@
 import Papa from 'papaparse'
 import type { CameraSettings, CameraResponse } from './types'
+import { currentCameraSettings } from './state'
 
 const INQUIRY_SLEEP = 150 // ms
 let lastSentSettings: Record<string, CameraSettings> = {}
-let currentCameraSettings: CameraResponse | null = null
 
 export async function loadPresetSettings(position: number): Promise<CameraSettings | null> {
-  console.log(`Loading preset settings for position: ${position}`)
+  //console.log(`Loading preset settings for position: ${position}`)
   try {
     const response = await fetch('/api/camera-settings')
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
     const csvText = await response.text()
-    console.log('Received CSV data, first 100 chars:', csvText.substring(0, 100))
+    //console.log('Received CSV data, first 100 chars:', csvText.substring(0, 100))
     
     return new Promise((resolve, reject) => {
-      Papa.parse(csvText, {
+      Papa.parse<CameraSettings>(csvText, {
         header: true,
         dynamicTyping: true,
         skipEmptyLines: true,
         complete: (results: Papa.ParseResult<CameraSettings>) => {
-          console.log('CSV Parse Results:', {
-            rows: results.data.length,
-            fields: results.meta.fields,
-            sample: results.data[0]
-          })
+          // console.log('CSV Parse Results:', {
+          //   rows: results.data.length,
+          //   fields: results.meta.fields,
+          //   sample: results.data[0]
+          // })
 
           if (results.errors.length > 0) {
             console.error('CSV parsing errors:', results.errors)
@@ -42,14 +42,14 @@ export async function loadPresetSettings(position: number): Promise<CameraSettin
               shutterspeed: Number(preset.shutterspeed),
               brightness: Number(preset.brightness)
             }
-            console.log('Found and validated preset settings:', validatedPreset)
+            //console.log('Found and validated preset settings:', validatedPreset)
             resolve(validatedPreset)
           } else {
             console.warn(`No preset found for position ${position}`)
             resolve(null)
           }
         },
-        error: (error: Papa.ParseError) => {
+        error: (error: Error) => {
           console.error('CSV parsing error:', error)
           reject(error)
         }
@@ -83,6 +83,8 @@ export async function sendCameraControl(
         const colorControlMessage = {
           eventName: `colour-control.camera${cameraNumber}`,
           eventData: {
+            changeexposuremode: "1",
+            exposuremode: "manual",
             iris: Math.round(settings.iris),
             exposuregain: Math.round(settings.exposuregain),
             shutterspeed: Math.round(settings.shutterspeed),
@@ -148,14 +150,14 @@ export async function sendCameraControl(
 }
 
 async function checkCurrentSettings(cameraNumber: number, desiredSettings: CameraSettings): Promise<boolean> {
-  if (!currentCameraSettings) return false
+  if (!currentCameraSettings) return false;
 
   const results = {
     iris: Math.round(currentCameraSettings.ExposureIris) === Math.round(desiredSettings.iris),
     gain: Math.round(currentCameraSettings.ExposureGain) === Math.round(desiredSettings.exposuregain),
     shutterSpeed: Math.round(currentCameraSettings.ExposureExposureTime) === Math.round(desiredSettings.shutterspeed),
     brightness: Math.round(currentCameraSettings.DigitalBrightLevel) === Math.round(desiredSettings.brightness)
-  }
+  };
 
   console.log('Settings comparison:', {
     current: {
@@ -171,9 +173,9 @@ async function checkCurrentSettings(cameraNumber: number, desiredSettings: Camer
       brightness: Math.round(desiredSettings.brightness)
     },
     results
-  })
+  });
 
-  return Object.values(results).every(Boolean)
+  return Object.values(results).every(Boolean);
 }
 
 export function verifyCameraResponse(cameraNumber: number, response: CameraResponse): boolean {
@@ -188,7 +190,6 @@ export function verifyCameraResponse(cameraNumber: number, response: CameraRespo
   console.log('Comparing with last sent settings:', lastSettings)
 
   const toleranceCheck = (sent: number, received: number) => {
-    // Convert to integers for exact comparison
     const sentInt = Math.round(sent)
     const receivedInt = Math.round(received)
     const diff = Math.abs(sentInt - receivedInt)

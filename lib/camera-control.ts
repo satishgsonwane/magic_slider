@@ -1,6 +1,7 @@
 import Papa from 'papaparse'
 import type { CameraSettings, CameraResponse } from './types'
 import { currentCameraSettings } from './state'
+import { verifyCameraResponse } from './utils'
 
 const INQUIRY_SLEEP = 150 // ms
 let lastSentSettings: Record<string, CameraSettings> = {}
@@ -151,34 +152,10 @@ export async function sendCameraControl(
 
 async function checkCurrentSettings(cameraNumber: number, desiredSettings: CameraSettings): Promise<boolean> {
   if (!currentCameraSettings) return false;
-
-  const results = {
-    iris: Math.round(currentCameraSettings.ExposureIris) === Math.round(desiredSettings.iris),
-    gain: Math.round(currentCameraSettings.ExposureGain) === Math.round(desiredSettings.exposuregain),
-    shutterSpeed: Math.round(currentCameraSettings.ExposureExposureTime) === Math.round(desiredSettings.shutterspeed),
-    brightness: Math.round(currentCameraSettings.DigitalBrightLevel) === Math.round(desiredSettings.brightness)
-  };
-
-  console.log('Settings comparison:', {
-    current: {
-      iris: Math.round(currentCameraSettings.ExposureIris),
-      gain: Math.round(currentCameraSettings.ExposureGain),
-      shutterSpeed: Math.round(currentCameraSettings.ExposureExposureTime),
-      brightness: Math.round(currentCameraSettings.DigitalBrightLevel)
-    },
-    desired: {
-      iris: Math.round(desiredSettings.iris),
-      gain: Math.round(desiredSettings.exposuregain),
-      shutterSpeed: Math.round(desiredSettings.shutterspeed),
-      brightness: Math.round(desiredSettings.brightness)
-    },
-    results
-  });
-
-  return Object.values(results).every(Boolean);
+  return verifyCameraResponse(cameraNumber, currentCameraSettings, desiredSettings);
 }
 
-export function verifyCameraResponse(cameraNumber: number, response: CameraResponse): boolean {
+export function verifyLocalCameraResponse(cameraNumber: number, response: CameraResponse): boolean {
   console.log(`\nVerifying response for camera ${cameraNumber}:`)
   console.log('Received response:', response)
   
@@ -210,4 +187,4 @@ export function verifyCameraResponse(cameraNumber: number, response: CameraRespo
   console.log(`Final verification result: ${verified ? 'PASSED' : 'FAILED'}`)
 
   return verified
-} 
+}

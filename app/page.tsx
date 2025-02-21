@@ -102,7 +102,7 @@ export default function CameraControl() {
           <Moon className="h-4 w-4" />
         </div>
 
-        <h1 className="text-3xl font-bold mb-8 text-red-500 text-center drop-shadow-lg">Camera Brightness Control</h1>
+        <h1 className="text-3xl font-bold mb-8 text-red-500 text-center drop-shadow-lg">Magic Slider</h1>
 
         <div className="space-y-6">
           <div className="flex justify-between items-center">
@@ -161,14 +161,14 @@ export default function CameraControl() {
 
           <div className="flex justify-center gap-2">
             {[
-              [ChevronFirst, -10],
-              [ChevronLeft, -1],
-              [ChevronRight, 1],
-              [ChevronLast, 10],
-            ].map(([Icon, value], index) => (
+              { Icon: ChevronFirst, value: -10 },
+              { Icon: ChevronLeft, value: -1 },
+              { Icon: ChevronRight, value: 1 },
+              { Icon: ChevronLast, value: 10 },
+            ].map(({ Icon, value }, index) => (
               <button
                 key={index}
-                onClick={() => handleSeek(value as number)}
+                onClick={() => handleSeek(value)}
                 className="p-2 rounded-md bg-black/40 text-red-100 hover:bg-red-700/40 hover-red transition-colors border border-red-900/50"
               >
                 <Icon className="h-4 w-4" />

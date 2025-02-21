@@ -18,12 +18,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   
   useEffect(() => {
     console.log('Initializing WebSocket connection...')
-    const ws = new WebSocket(process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:12555')
+    const ws = new WebSocket(process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:12553')
     
     ws.onopen = () => {
       console.log('WebSocket connection established')
-      // Optionally send a test message to verify
-      ws.send(JSON.stringify({ test: 'connection' }));
+      ws.send(JSON.stringify({ test: 'connection' }))
     }
 
     ws.onclose = () => {
@@ -35,13 +34,14 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     }
     
     ws.onmessage = (event) => {
-      console.log('\nReceived WebSocket message:', event.data);
+      console.log('Received WebSocket message:', event.data);
       const data = JSON.parse(event.data);
       console.log('Parsed message data:', data); // Log the parsed data
       
-      if (data.topic?.startsWith('caminq.camera')) {
-        const cameraNumber = parseInt(data.topic.replace('caminq.camera', ''))
-        console.log(`Processing camera inquiry response for camera ${cameraNumber}:`, data.payload)
+      if (data.topic?.startsWith('ptzcontrol.camera')) {
+        console.log(`Processing inquiry response for camera: ${data.topic}`);
+        const cameraNumber = parseInt(data.topic.replace('ptzcontrol.camera', ''));
+        
         // Log the received payload
         console.log('Received payload:', data.payload);
         
@@ -53,6 +53,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
           ExposureExposureTime: Math.round(Number(data.payload.ExposureExposureTime)),
           DigitalBrightLevel: Math.round(Number(data.payload.DigitalBrightLevel))
         });
+        
         console.log('Parsed camera settings:', data.payload);
         
         // Call verifyCameraResponse

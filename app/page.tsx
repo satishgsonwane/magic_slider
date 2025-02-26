@@ -162,10 +162,10 @@ export default function CameraControl() {
 
           <div className="flex justify-center gap-2">
             {[
-              { Icon: ChevronFirst, value: -10 },
+              { Icon: ChevronFirst, value: -5 },
               { Icon: ChevronLeft, value: -1 },
               { Icon: ChevronRight, value: 1 },
-              { Icon: ChevronLast, value: 10 },
+              { Icon: ChevronLast, value: 5 },
             ].map(({ Icon, value }, index) => (
               <button
                 key={index}

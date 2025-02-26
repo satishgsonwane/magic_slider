@@ -43,7 +43,7 @@ export default function CameraControl() {
 
   const handleSliderChange = useDebouncedCallback(async (value: number) => {
     setSliderPosition(value)
-    if (selectedCamera === null) return
+    const cameras = selectedCamera === null ? [1, 2, 3, 4, 5, 6] : [selectedCamera]
 
     try {
       // Load preset settings for the position
@@ -54,7 +54,7 @@ export default function CameraControl() {
 
       // Send control messages with status updates
       await sendCameraControl(
-        [selectedCamera],
+        cameras,
         settings,
         Number.parseInt(venueNumber),
         Number.parseInt(maxNatsMessages),

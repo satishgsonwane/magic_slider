@@ -12,13 +12,11 @@ import { processCameraMessages } from "@/lib/message-processor"
 import { loadCameraSettings, saveCameraSettings } from "@/lib/data-manager"
 import { loadPresetSettings, sendCameraControl, verifyCameraResponse } from '@/lib/camera-control'
 
-// const CSV_URL =
-//   "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/camera_settings_60-HZN6d6neOmomocRKsMYsTj2Qy0SiV4.csv"
 const CSV_URL = "/data/camera_settings_60.csv"
 
 export default function CameraControl() {
   const [sliderPosition, setSliderPosition] = useState(0)
-  const [selectedCameras, setSelectedCameras] = useState<number[]>([])
+  const [selectedCamera, setSelectedCamera] = useState<number | null>(null)
   const [maxNatsMessages, setMaxNatsMessages] = useState("2")
   const [status, setStatus] = useState("Ready")
   const [isDarkMode, setIsDarkMode] = useState(true)
@@ -45,7 +43,7 @@ export default function CameraControl() {
 
   const handleSliderChange = useDebouncedCallback(async (value: number) => {
     setSliderPosition(value)
-    if (selectedCameras.length === 0) return
+    if (selectedCamera === null) return
 
     try {
       // Load preset settings for the position
@@ -56,7 +54,7 @@ export default function CameraControl() {
 
       // Send control messages with status updates
       await sendCameraControl(
-        selectedCameras,
+        [selectedCamera],
         settings,
         Number.parseInt(venueNumber),
         Number.parseInt(maxNatsMessages),
@@ -75,13 +73,11 @@ export default function CameraControl() {
   }, 1000)
 
   const handleCameraSelection = (cameraNumber: number) => {
-    setSelectedCameras((prev) =>
-      prev.includes(cameraNumber) ? prev.filter((cam) => cam !== cameraNumber) : [...prev, cameraNumber],
-    )
+    setSelectedCamera(cameraNumber === selectedCamera ? null : cameraNumber)
   }
 
   const handleAllCameras = () => {
-    setSelectedCameras(selectedCameras.length === 6 ? [] : [1, 2, 3, 4, 5, 6])
+    setSelectedCamera(null)
   }
 
   const handleSeek = (amount: number) => {
@@ -127,7 +123,7 @@ export default function CameraControl() {
                 key={cam}
                 onClick={() => handleCameraSelection(cam)}
                 className={`camera-button px-6 py-2 rounded-md border border-red-900/50 ${
-                  selectedCameras.includes(cam) ? "active" : "text-red-100 bg-black/40"
+                  selectedCamera === cam ? "active" : "text-red-100 bg-black/40"
                 }`}
               >
                 CAMERA {cam}
@@ -139,7 +135,7 @@ export default function CameraControl() {
             <button
               onClick={handleAllCameras}
               className={`camera-button px-6 py-2 rounded-md border border-red-900/50 ${
-                selectedCameras.length === 6 ? "active" : "text-red-100 bg-black/40"
+                selectedCamera === null ? "active" : "text-red-100 bg-black/40"
               }`}
             >
               ALL CAMS

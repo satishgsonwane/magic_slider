@@ -75,7 +75,7 @@ export async function sendCameraControl(
   
   console.log('Constructed URL:', url)
 
-  for (const cameraNumber of cameraNumbers) {
+  const cameraControlPromises = cameraNumbers.map(async (cameraNumber) => {
     console.log(`\n--- Processing Camera ${cameraNumber} ---`)
     let settingsApplied = false
     let retryCount = 0
@@ -122,26 +122,20 @@ export async function sendCameraControl(
         await new Promise(resolve => setTimeout(resolve, 500))
 
         // Check if settings were applied
-        if (currentCameraSettings) {
-          const isVerified = await checkCurrentSettings(cameraNumber, settings)
-          if (isVerified) {
-            console.log(`✓ Settings confirmed for camera ${cameraNumber}`)
-            settingsApplied = true
-            onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
-            break
-          }
-        }
-
-        retryCount++
-        if (!settingsApplied) {
+        const isVerified = await checkCurrentSettings(cameraNumber, settings)
+        if (isVerified) {
+          console.log(`✓ Settings confirmed for camera ${cameraNumber}`)
+          settingsApplied = true
+          onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
+        } else {
           console.log(`✗ Settings not confirmed for camera ${cameraNumber}`)
-          onStatus(`Settings not confirmed (Attempt ${retryCount}/${copies}) for Camera ${cameraNumber}`)
+          onStatus(`Settings not confirmed (Attempt ${retryCount + 1}/${copies}) for Camera ${cameraNumber}`)
           await new Promise(resolve => setTimeout(resolve, 100))
         }
 
+        retryCount++
       } catch (error) {
         console.error(`Error in attempt ${retryCount + 1}:`, error)
-        retryCount++
       }
     }
 
@@ -149,7 +143,10 @@ export async function sendCameraControl(
     if (!settingsApplied) {
       onStatus(`Failed to apply settings for Camera ${cameraNumber} after ${copies} attempts`)
     }
-  }
+  })
+
+  await Promise.all(cameraControlPromises)
+  console.log('=== Camera Control Sequence Completed ===')
 }
 
 async function checkCurrentSettings(cameraNumber: number, desiredSettings: CameraSettings): Promise<boolean> {

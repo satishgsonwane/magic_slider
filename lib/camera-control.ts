@@ -72,6 +72,8 @@ export async function sendCameraControl(
   console.log('\n=== Starting Camera Control Sequence ===')
   const headers = new Headers({ 'Content-Type': 'application/json' })
   const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/venue${venue}/engine/lut/nats`
+  
+  console.log('Constructed URL:', url)
 
   for (const cameraNumber of cameraNumbers) {
     console.log(`\n--- Processing Camera ${cameraNumber} ---`)

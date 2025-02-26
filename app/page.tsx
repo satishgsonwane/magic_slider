@@ -12,16 +12,17 @@ import { processCameraMessages } from "@/lib/message-processor"
 import { loadCameraSettings, saveCameraSettings } from "@/lib/data-manager"
 import { loadPresetSettings, sendCameraControl, verifyCameraResponse } from '@/lib/camera-control'
 
-const CSV_URL =
-  "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/camera_settings_60-HZN6d6neOmomocRKsMYsTj2Qy0SiV4.csv"
+// const CSV_URL =
+//   "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/camera_settings_60-HZN6d6neOmomocRKsMYsTj2Qy0SiV4.csv"
+const CSV_URL = "/data/camera_settings_60.csv"
 
 export default function CameraControl() {
   const [sliderPosition, setSliderPosition] = useState(0)
   const [selectedCameras, setSelectedCameras] = useState<number[]>([])
-  const [maxNatsMessages, setMaxNatsMessages] = useState("5")
+  const [maxNatsMessages, setMaxNatsMessages] = useState("2")
   const [status, setStatus] = useState("Ready")
   const [isDarkMode, setIsDarkMode] = useState(true)
-  const [venueNumber, setVenueNumber] = useState("1")
+  const [venueNumber, setVenueNumber] = useState("13")
   const { toast } = useToast()
 
   useEffect(() => {

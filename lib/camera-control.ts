@@ -108,7 +108,7 @@ export async function sendCameraControl(
         const inquiryMessage = {
           eventName: `ptzcontrol.camera${cameraNumber}`,
           eventData: {
-            inqcam: `camera${cameraNumber}`
+            inqcam: `${cameraNumber}`
           }
         }
 

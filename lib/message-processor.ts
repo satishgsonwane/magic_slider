@@ -30,7 +30,7 @@ export async function processCameraMessages(sliderPosition: number, cameras: num
     const inquiryMessage = {
       eventName: `ptzcontrol.camera${cameraNumber}`,
       eventData: {
-        inqcam: `camera_${cameraNumber}`,
+        inqcam: `${cameraNumber}`,
       },
     }
 

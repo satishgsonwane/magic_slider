@@ -67,7 +67,8 @@ export async function sendCameraControl(
   settings: CameraSettings,
   venue: number = 13,
   copies: number = 5,
-  onStatus: (status: string) => void
+  onStatus: (status: string) => void,
+  onMessageSent?: (topic: string, message: any) => void
 ) {
   console.log('\n=== Starting Camera Control Sequence ===')
   const headers = new Headers({ 'Content-Type': 'application/json' })
@@ -104,6 +105,10 @@ export async function sendCameraControl(
           body: JSON.stringify(colorControlMessage)
         })
 
+        if (onMessageSent) {
+          onMessageSent(`colour-control.camera${cameraNumber}`, colorControlMessage.eventData)
+        }
+
         // Send inquiry message
         const inquiryMessage = {
           eventName: `ptzcontrol.camera${cameraNumber}`,
@@ -117,6 +122,10 @@ export async function sendCameraControl(
           headers,
           body: JSON.stringify(inquiryMessage)
         })
+
+        if (onMessageSent) {
+          onMessageSent(`ptzcontrol.camera${cameraNumber}`, inquiryMessage.eventData)
+        }
 
         // Wait for response
         await new Promise(resolve => setTimeout(resolve, 500))

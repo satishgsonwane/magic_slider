@@ -22,7 +22,7 @@ export default function CameraControl() {
   const [maxNatsMessages, setMaxNatsMessages] = useState("2")
   const [status, setStatus] = useState("Ready")
   const [isDarkMode, setIsDarkMode] = useState(true)
-  const [venueNumber, setVenueNumber] = useState("13")
+  const [venueNumber, setVenueNumber] = useState("15")
   const [maxSliderValue, setMaxSliderValue] = useState(60)
   const { toast } = useToast()
   const sentMessagesRef = useRef<{ [key: string]: any }>({})

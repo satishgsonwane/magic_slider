@@ -36,12 +36,13 @@ export async function loadPresetSettings(position: number): Promise<CameraSettin
           const preset = settings.find(s => s.position === position)
           if (preset) {
             // Only include the fields from CSV
-            const validatedPreset = {
+            const validatedPreset: CameraSettings = {
               position: Number(preset.position),
               iris: Number(preset.iris),
               exposuregain: Number(preset.exposuregain),
               shutterspeed: Number(preset.shutterspeed),
-              brightness: Number(preset.brightness)
+              brightness: Number(preset.brightness),
+              exposuremode: preset.exposuremode
             }
             //console.log('Found and validated preset settings:', validatedPreset)
             resolve(validatedPreset)
@@ -70,14 +71,14 @@ export async function sendCameraControl(
   onStatus: (status: string) => void,
   onMessageSent?: (topic: string, message: any) => void
 ) {
-  console.log('\n=== Starting Camera Control Sequence ===')
+  // console.log('\n=== Starting Camera Control Sequence ===')
   const headers = new Headers({ 'Content-Type': 'application/json' })
   const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/venue${venue}/engine/lut/nats`
   
   console.log('Constructed URL:', url)
 
   const cameraControlPromises = cameraNumbers.map(async (cameraNumber) => {
-    console.log(`\n--- Processing Camera ${cameraNumber} ---`)
+    // console.log(`\n--- Processing Camera ${cameraNumber} ---`)
     let settingsApplied = false
     let retryCount = 0
 
@@ -175,8 +176,8 @@ export function verifyLocalCameraResponse(cameraNumber: number, response: Camera
   console.log('Comparing with last sent settings:', lastSettings)
 
   const toleranceCheck = (sent: number, received: number) => {
-    const sentInt = Math.round(sent)
-    const receivedInt = Math.round(received)
+    const sentInt = Math.round(+sent)
+    const receivedInt = Math.round(+received)
     const diff = Math.abs(sentInt - receivedInt)
     const passed = diff === 0
     console.log(`Comparing ${sentInt} with ${receivedInt}: diff=${diff}, passed=${passed}`)
@@ -187,7 +188,8 @@ export function verifyLocalCameraResponse(cameraNumber: number, response: Camera
     iris: toleranceCheck(response.ExposureIris, lastSettings.iris),
     gain: toleranceCheck(response.ExposureGain, lastSettings.exposuregain),
     shutterSpeed: toleranceCheck(response.ExposureExposureTime, lastSettings.shutterspeed),
-    brightness: toleranceCheck(response.DigitalBrightLevel, lastSettings.brightness)
+    brightness: toleranceCheck(response.DigitalBrightLevel, lastSettings.brightness),
+    exposureMode: response.ExposureMode === lastSettings.exposuremode
   }
 
   console.log('Verification results:', results)

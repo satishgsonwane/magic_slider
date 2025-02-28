@@ -18,8 +18,7 @@ export function verifyCameraResponse(cameraNumber: number, response: CameraRespo
     const desiredInt = Math.round(desired)
     const diff = Math.abs(receivedInt - desiredInt)
     const passed = diff === 0
-    console.log(`Comparing ${receivedInt} with ${desiredInt}: diff=${diff}, passed=${passed}`)
-    return passed
+    return { passed, diff }
   }
 
   const results = {
@@ -29,8 +28,15 @@ export function verifyCameraResponse(cameraNumber: number, response: CameraRespo
     brightness: toleranceCheck(response.DigitalBrightLevel, desiredSettings.brightness)
   }
 
-  console.log('Verification results:', results)
-  const verified = Object.values(results).every(Boolean)
+  const mismatchedSettings = Object.entries(results)
+    .filter(([_, result]) => !result.passed)
+    .map(([key, result]) => ({ key, diff: result.diff }))
+
+  if (mismatchedSettings.length > 0) {
+    console.error('Mismatched settings:', mismatchedSettings)
+  }
+
+  const verified = mismatchedSettings.length === 0
   console.log(`Final verification result: ${verified ? 'PASSED' : 'FAILED'}`)
 
   return verified

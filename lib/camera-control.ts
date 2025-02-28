@@ -163,19 +163,20 @@ export async function sendCameraControl(
 
         handleMessageSent(`ptzcontrol.camera${cameraNumber}`, inquiryMessage.eventData)
 
-        // Wait for response with a longer timeout and polling
+        // Wait for response with a longer timeout and polling for camera response
         console.log('Waiting for camera response...')
         let waitAttempts = 0
         const maxWaitAttempts = 10
-        while (waitAttempts < maxWaitAttempts && !currentCameraSettings) {
+        let cameraResponse = null;
+
+        while (waitAttempts < maxWaitAttempts && !cameraResponse) {
           await new Promise(resolve => setTimeout(resolve, 300)) // 300ms per attempt
-          console.log(`Wait attempt ${waitAttempts + 1}/${maxWaitAttempts}, currentCameraSettings:`, currentCameraSettings)
+          cameraResponse = cameraResponses[cameraNumber.toString()];
+          console.log(`Wait attempt ${waitAttempts + 1}/${maxWaitAttempts}, cameraResponse:`, cameraResponse)
           waitAttempts++
         }
 
-        // Check if settings were applied using the local verification first
-        console.log('Current camera settings before verification:', currentCameraSettings)
-        const cameraResponse = cameraResponses[cameraNumber.toString()];
+        // Check if settings were applied using the local verification
         if (cameraResponse) {
           const localVerified = verifyLocalCameraResponse(cameraNumber, cameraResponse)
           if (localVerified) {
@@ -183,36 +184,19 @@ export async function sendCameraControl(
             settingsApplied = true
             onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
           } else {
-            // Fall back to the other verification method
-            const isVerified = await checkCurrentSettings(cameraNumber, settings)
-            if (isVerified) {
-              console.log(`✓ Settings confirmed for camera ${cameraNumber}`)
-              settingsApplied = true
-              onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
-            } else {
-              console.log(`✗ Settings not confirmed for camera ${cameraNumber}`)
-              onStatus(`Settings not confirmed (Attempt ${retryCount + 1}/${copies}) for Camera ${cameraNumber}`)
-              await new Promise(resolve => setTimeout(resolve, 100))
-            }
-          }
-        } else {
-          console.warn(`Current camera settings are null for camera ${cameraNumber}, using fallback verification`)
-          // Fall back to the other verification method
-          const isVerified = await checkCurrentSettings(cameraNumber, settings)
-          if (isVerified) {
-            console.log(`✓ Settings confirmed for camera ${cameraNumber}`)
-            settingsApplied = true
-            onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
-          } else {
             console.log(`✗ Settings not confirmed for camera ${cameraNumber}`)
             onStatus(`Settings not confirmed (Attempt ${retryCount + 1}/${copies}) for Camera ${cameraNumber}`)
             await new Promise(resolve => setTimeout(resolve, 100))
           }
+        } else {
+          console.warn(`No camera response received for camera ${cameraNumber} after ${maxWaitAttempts} attempts`)
+          onStatus(`No response from Camera ${cameraNumber} (Attempt ${retryCount + 1}/${copies})`)
         }
 
         retryCount++
       } catch (error) {
         console.error(`Error in attempt ${retryCount + 1}:`, error)
+        retryCount++
       }
     }
 

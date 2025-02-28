@@ -5,7 +5,7 @@ import { verifyCameraResponse } from './utils'
 
 const INQUIRY_SLEEP = 150 // ms
 let lastSentSettings: Record<string, CameraSettings> = {}
-let cameraResponses: Record<string, CameraResponse> = {}
+export let cameraResponses: Record<string, CameraResponse> = {}
 
 export async function loadPresetSettings(position: number): Promise<CameraSettings | null> {
   //console.log(`Loading preset settings for position: ${position}`)
@@ -72,6 +72,28 @@ export async function sendCameraControl(
   onStatus: (status: string) => void,
   onMessageSent?: (topic: string, message: any) => void
 ) {
+  // Reset camera responses at the start of a new control sequence
+  resetCameraResponses()
+  
+  // Add a status tracker for all cameras
+  const cameraStatuses: Record<string, string> = {};
+  
+  // Create a function to update individual camera status and combine for all
+  const updateStatus = (cameraNumber: number, message: string) => {
+    cameraStatuses[cameraNumber.toString()] = message;
+    
+    // If we're controlling multiple cameras, show a combined status
+    if (cameraNumbers.length > 1) {
+      const statusMessages = Object.entries(cameraStatuses)
+        .map(([cam, status]) => `Camera ${cam}: ${status}`)
+        .join('\n');
+      onStatus(statusMessages);
+    } else {
+      // For single camera, just show the message
+      onStatus(message);
+    }
+  };
+
   // console.log('\n=== Starting Camera Control Sequence ===')
   const headers = new Headers({ 'Content-Type': 'application/json' })
   const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/venue${venue}/engine/lut/nats`
@@ -182,15 +204,15 @@ export async function sendCameraControl(
           if (localVerified) {
             console.log(`✓ Settings confirmed locally for camera ${cameraNumber}`)
             settingsApplied = true
-            onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
+            updateStatus(cameraNumber, `Settings applied successfully`);
           } else {
             console.log(`✗ Settings not confirmed for camera ${cameraNumber}`)
-            onStatus(`Settings not confirmed (Attempt ${retryCount + 1}/${copies}) for Camera ${cameraNumber}`)
+            updateStatus(cameraNumber, `Settings not confirmed (Attempt ${retryCount + 1}/${copies})`);
             await new Promise(resolve => setTimeout(resolve, 100))
           }
         } else {
           console.warn(`No camera response received for camera ${cameraNumber} after ${maxWaitAttempts} attempts`)
-          onStatus(`No response from Camera ${cameraNumber} (Attempt ${retryCount + 1}/${copies})`)
+          updateStatus(cameraNumber, `No response from Camera ${cameraNumber} (Attempt ${retryCount + 1}/${copies})`);
         }
 
         retryCount++
@@ -202,7 +224,7 @@ export async function sendCameraControl(
 
     // Final status update
     if (!settingsApplied) {
-      onStatus(`Failed to apply settings for Camera ${cameraNumber} after ${copies} attempts`)
+      updateStatus(cameraNumber, `Failed to apply settings after ${copies} attempts`);
     }
   })
 
@@ -274,7 +296,15 @@ export function processCameraResponse(topic: string, data: any) {
       DigitalBrightLevel: Number(data?.DigitalBrightLevel || 0)
     };
     
+    // Store the response and log the entire cameraResponses object
     cameraResponses[cameraNumber.toString()] = response;
-    console.log('Stored camera response:', response);
+    console.log(`Stored camera response for camera ${cameraNumber}:`, response);
+    console.log('All camera responses:', cameraResponses);
   }
+}
+
+// Add a function to reset the responses for a new control sequence
+export function resetCameraResponses() {
+  cameraResponses = {}
+  console.log('Camera responses reset')
 }

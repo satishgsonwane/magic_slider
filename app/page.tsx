@@ -258,7 +258,7 @@ export default function CameraControl() {
             </button>
           </div>
 
-          <div className="bg-black/40 p-4 rounded-md text-sm text-center text-red-100 border border-red-900/50">
+          <div className="bg-black/40 p-4 rounded-md text-sm text-center text-red-100 border border-red-900/50 whitespace-pre-line">
             {status}
           </div>
 

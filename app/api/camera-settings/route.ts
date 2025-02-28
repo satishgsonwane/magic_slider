@@ -11,7 +11,7 @@ export async function GET() {
     let csvData
     try {
       csvData = await fs.readFile(csvPath, 'utf-8')
-      console.log('Successfully loaded CSV from local file')
+      // console.log('Successfully loaded CSV from local file')
     } catch (error) {
       console.log('Local file not found, falling back to environment variable URL')
       // Fallback to URL from environment variable

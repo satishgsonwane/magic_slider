@@ -5,6 +5,7 @@ import { verifyCameraResponse } from './utils'
 
 const INQUIRY_SLEEP = 150 // ms
 let lastSentSettings: Record<string, CameraSettings> = {}
+let cameraResponses: Record<string, CameraResponse> = {}
 
 export async function loadPresetSettings(position: number): Promise<CameraSettings | null> {
   //console.log(`Loading preset settings for position: ${position}`)
@@ -77,8 +78,35 @@ export async function sendCameraControl(
   
   console.log('Constructed URL:', url)
 
+  console.log('Current camera settings at start:', currentCameraSettings)
+
+  // Add a function to store camera responses
+  const storeCameraResponse = (cameraNumber: number, response: CameraResponse) => {
+    cameraResponses[cameraNumber.toString()] = response;
+    console.log(`Stored response for camera ${cameraNumber}:`, response);
+  };
+  
+  // Pass this function to onMessageSent
+  const handleMessageSent = (topic: string, message: any) => {
+    console.log('handleMessageSent called with topic:', topic, 'message:', message);
+    
+    if (onMessageSent) {
+      onMessageSent(topic, message);
+    }
+    
+    // If this is a camera inquiry response, store it
+    if (topic.startsWith('caminq.camera')) {
+      console.log('Found camera inquiry response for topic:', topic);
+      const cameraNumber = parseInt(topic.replace('caminq.camera', ''));
+      console.log('Extracted camera number:', cameraNumber);
+      storeCameraResponse(cameraNumber, message);
+    } else {
+      console.log('Topic does not match caminq.camera pattern:', topic);
+    }
+  };
+
   const cameraControlPromises = cameraNumbers.map(async (cameraNumber) => {
-    // console.log(`\n--- Processing Camera ${cameraNumber} ---`)
+    console.log(`\n--- Processing Camera ${cameraNumber} ---`)
     let settingsApplied = false
     let retryCount = 0
 
@@ -100,15 +128,24 @@ export async function sendCameraControl(
         console.log(`\nAttempt ${retryCount + 1}/${copies} for camera ${cameraNumber}`)
         console.log('Sending color control:', colorControlMessage)
         
+        // Store the settings for later verification
+        lastSentSettings[cameraNumber.toString()] = {
+          position: cameraNumber,
+          iris: Math.round(settings.iris),
+          exposuregain: Math.round(settings.exposuregain),
+          shutterspeed: Math.round(settings.shutterspeed),
+          brightness: Math.round(settings.brightness),
+          exposuremode: "manual"
+        };
+        console.log(`Stored settings for camera ${cameraNumber}:`, lastSentSettings[cameraNumber.toString()])
+
         await fetch(url, {
           method: 'POST',
           headers,
           body: JSON.stringify(colorControlMessage)
         })
 
-        if (onMessageSent) {
-          onMessageSent(`colour-control.camera${cameraNumber}`, colorControlMessage.eventData)
-        }
+        handleMessageSent(`colour-control.camera${cameraNumber}`, colorControlMessage.eventData)
 
         // Send inquiry message
         const inquiryMessage = {
@@ -124,23 +161,53 @@ export async function sendCameraControl(
           body: JSON.stringify(inquiryMessage)
         })
 
-        if (onMessageSent) {
-          onMessageSent(`ptzcontrol.camera${cameraNumber}`, inquiryMessage.eventData)
+        handleMessageSent(`ptzcontrol.camera${cameraNumber}`, inquiryMessage.eventData)
+
+        // Wait for response with a longer timeout and polling
+        console.log('Waiting for camera response...')
+        let waitAttempts = 0
+        const maxWaitAttempts = 10
+        while (waitAttempts < maxWaitAttempts && !currentCameraSettings) {
+          await new Promise(resolve => setTimeout(resolve, 300)) // 300ms per attempt
+          console.log(`Wait attempt ${waitAttempts + 1}/${maxWaitAttempts}, currentCameraSettings:`, currentCameraSettings)
+          waitAttempts++
         }
 
-        // Wait for response
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        // Check if settings were applied
-        const isVerified = await checkCurrentSettings(cameraNumber, settings)
-        if (isVerified) {
-          console.log(`✓ Settings confirmed for camera ${cameraNumber}`)
-          settingsApplied = true
-          onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
+        // Check if settings were applied using the local verification first
+        console.log('Current camera settings before verification:', currentCameraSettings)
+        const cameraResponse = cameraResponses[cameraNumber.toString()];
+        if (cameraResponse) {
+          const localVerified = verifyLocalCameraResponse(cameraNumber, cameraResponse)
+          if (localVerified) {
+            console.log(`✓ Settings confirmed locally for camera ${cameraNumber}`)
+            settingsApplied = true
+            onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
+          } else {
+            // Fall back to the other verification method
+            const isVerified = await checkCurrentSettings(cameraNumber, settings)
+            if (isVerified) {
+              console.log(`✓ Settings confirmed for camera ${cameraNumber}`)
+              settingsApplied = true
+              onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
+            } else {
+              console.log(`✗ Settings not confirmed for camera ${cameraNumber}`)
+              onStatus(`Settings not confirmed (Attempt ${retryCount + 1}/${copies}) for Camera ${cameraNumber}`)
+              await new Promise(resolve => setTimeout(resolve, 100))
+            }
+          }
         } else {
-          console.log(`✗ Settings not confirmed for camera ${cameraNumber}`)
-          onStatus(`Settings not confirmed (Attempt ${retryCount + 1}/${copies}) for Camera ${cameraNumber}`)
-          await new Promise(resolve => setTimeout(resolve, 100))
+          console.warn(`Current camera settings are null for camera ${cameraNumber}, using fallback verification`)
+          // Fall back to the other verification method
+          const isVerified = await checkCurrentSettings(cameraNumber, settings)
+          if (isVerified) {
+            console.log(`✓ Settings confirmed for camera ${cameraNumber}`)
+            settingsApplied = true
+            onStatus(`Settings applied successfully for Camera ${cameraNumber}`)
+          } else {
+            console.log(`✗ Settings not confirmed for camera ${cameraNumber}`)
+            onStatus(`Settings not confirmed (Attempt ${retryCount + 1}/${copies}) for Camera ${cameraNumber}`)
+            await new Promise(resolve => setTimeout(resolve, 100))
+          }
         }
 
         retryCount++
@@ -156,7 +223,7 @@ export async function sendCameraControl(
   })
 
   await Promise.all(cameraControlPromises)
-  console.log('=== Camera Control Sequence Completed ===')
+  // console.log('=== Camera Control Sequence Completed ===')
 }
 
 async function checkCurrentSettings(cameraNumber: number, desiredSettings: CameraSettings): Promise<boolean> {
@@ -175,10 +242,14 @@ export function verifyLocalCameraResponse(cameraNumber: number, response: Camera
   }
   console.log('Comparing with last sent settings:', lastSettings)
 
-  const toleranceCheck = (sent: number, received: number) => {
-    const sentInt = Math.round(+sent)
-    const receivedInt = Math.round(+received)
-    const diff = Math.abs(sentInt - receivedInt)
+  // Ensure we're comparing numbers, not strings
+  const toleranceCheck = (received: number | string, sent: number | string) => {
+    const receivedNum = typeof received === 'string' ? parseFloat(received) : received
+    const sentNum = typeof sent === 'string' ? parseFloat(sent) : sent
+    
+    const receivedInt = Math.round(receivedNum)
+    const sentInt = Math.round(sentNum)
+    const diff = Math.abs(receivedInt - sentInt)
     const passed = diff === 0
     console.log(`Comparing ${sentInt} with ${receivedInt}: diff=${diff}, passed=${passed}`)
     return passed
@@ -189,7 +260,7 @@ export function verifyLocalCameraResponse(cameraNumber: number, response: Camera
     gain: toleranceCheck(response.ExposureGain, lastSettings.exposuregain),
     shutterSpeed: toleranceCheck(response.ExposureExposureTime, lastSettings.shutterspeed),
     brightness: toleranceCheck(response.DigitalBrightLevel, lastSettings.brightness),
-    exposureMode: response.ExposureMode === lastSettings.exposuremode
+    exposureMode: response.ExposureMode?.toLowerCase() === lastSettings.exposuremode?.toLowerCase()
   }
 
   console.log('Verification results:', results)
@@ -197,4 +268,29 @@ export function verifyLocalCameraResponse(cameraNumber: number, response: Camera
   console.log(`Final verification result: ${verified ? 'PASSED' : 'FAILED'}`)
 
   return verified
+}
+
+// Add this function to capture WebSocket responses
+export function processCameraResponse(topic: string, data: any) {
+  console.log('Processing camera response:', topic, data);
+  
+  if (topic.startsWith('caminq.camera')) {
+    const cameraNumber = parseInt(topic.replace('caminq.camera', ''));
+    console.log('Storing camera response for camera', cameraNumber);
+    
+    // First log the data structure to understand what we're working with
+    console.log('Data structure:', JSON.stringify(data));
+    
+    // Convert the data to the expected CameraResponse format with null checks
+    const response: CameraResponse = {
+      ExposureMode: data?.ExposureMode || "manual",
+      ExposureIris: Number(data?.ExposureIris || 0),
+      ExposureGain: Number(data?.ExposureGain || 0),
+      ExposureExposureTime: Number(data?.ExposureExposureTime || 0),
+      DigitalBrightLevel: Number(data?.DigitalBrightLevel || 0)
+    };
+    
+    cameraResponses[cameraNumber.toString()] = response;
+    console.log('Stored camera response:', response);
+  }
 }

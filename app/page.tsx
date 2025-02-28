@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/components/ui/use-toast"
 import { useDebouncedCallback } from "use-debounce"
 import { loadCameraSettings, saveCameraSettings } from "@/lib/data-manager"
-import { loadPresetSettings, sendCameraControl } from '@/lib/camera-control'
+import { loadPresetSettings, sendCameraControl, processCameraResponse } from '@/lib/camera-control'
 import Papa from "papaparse"
 import io from "socket.io-client"
 import { CameraSettings } from "@/lib/types"
@@ -76,6 +76,12 @@ export default function CameraControl() {
 
     socket.on("nats_subs", (data: NatsSubscriptionData) => {
       console.log("nats_subs --- ", data)
+      
+      // Process camera responses
+      if (data.topic.startsWith('caminq.camera')) {
+        processCameraResponse(data.topic, data.data)
+      }
+      
       // Compare the incoming message with the sent message here
       const sentMessage = sentMessagesRef.current[data.topic]
       if (sentMessage) {

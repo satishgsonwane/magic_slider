@@ -88,6 +88,14 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
+          console.log('Updating current settings with:', {
+            ExposureMode: data.payload.ExposureMode,
+            ExposureIris: Math.round(Number(data.payload.ExposureIris)),
+            ExposureGain: Math.round(Number(data.payload.ExposureGain)),
+            ExposureExposureTime: Math.round(Number(data.payload.ExposureExposureTime)),
+            DigitalBrightLevel: Math.round(Number(data.payload.DigitalBrightLevel))
+          })
+
           updateCurrentSettings({
             ExposureMode: data.payload.ExposureMode,
             ExposureIris: Math.round(Number(data.payload.ExposureIris)),
@@ -97,11 +105,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
           })
 
           const desiredSettings = {
-            position: cameraNumber,
+            // position: cameraNumber,
             iris: data.payload.ExposureIris,
             exposuregain: data.payload.ExposureGain,
             shutterspeed: data.payload.ExposureExposureTime,
-            brightness: data.payload.DigitalBrightLevel
+            brightness: data.payload.DigitalBrightLevel,
+            exposuremode: data.payload.ExposureMode || 'manual'
           }
 
           const isVerified = verifyCameraResponse(cameraNumber, data.payload, desiredSettings)

@@ -79,7 +79,27 @@ export async function sendCameraControl(
   const cameraStatuses: Record<string, string> = {};
   
   // Create a function to update individual camera status and combine for all
-  const updateStatus = (cameraNumber: number, message: string) => {
+  const updateStatus = createStatusUpdater(cameraNumbers, cameraStatuses, onStatus);
+  
+  const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/venue${venue}/engine/lut/nats`
+  console.log('Constructed URL:', url)
+  console.log('Current camera settings at start:', currentCameraSettings)
+
+  // Process each camera in parallel
+  const cameraControlPromises = cameraNumbers.map(cameraNumber => 
+    processSingleCamera(cameraNumber, settings, url, copies, updateStatus, onMessageSent)
+  );
+
+  await Promise.all(cameraControlPromises)
+}
+
+// Helper functions to break down the large method
+function createStatusUpdater(
+  cameraNumbers: number[], 
+  cameraStatuses: Record<string, string>,
+  onStatus: (status: string) => void
+) {
+  return (cameraNumber: number, message: string) => {
     cameraStatuses[cameraNumber.toString()] = message;
     
     // If we're controlling multiple cameras, show a combined status
@@ -93,143 +113,149 @@ export async function sendCameraControl(
       onStatus(message);
     }
   };
+}
 
-  // console.log('\n=== Starting Camera Control Sequence ===')
+async function processSingleCamera(
+  cameraNumber: number,
+  settings: CameraSettings,
+  url: string,
+  copies: number,
+  updateStatus: (cameraNumber: number, message: string) => void,
+  onMessageSent?: (topic: string, message: any) => void
+) {
+  console.log(`\n--- Processing Camera ${cameraNumber} ---`)
+  let settingsApplied = false
+  let retryCount = 0
   const headers = new Headers({ 'Content-Type': 'application/json' })
-  const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/venue${venue}/engine/lut/nats`
-  
-  console.log('Constructed URL:', url)
 
-  console.log('Current camera settings at start:', currentCameraSettings)
-
-  // Add a function to store camera responses
-  const storeCameraResponse = (cameraNumber: number, response: CameraResponse) => {
-    cameraResponses[cameraNumber.toString()] = response;
-    console.log(`Stored response for camera ${cameraNumber}:`, response);
-  };
-  
-  // Pass this function to onMessageSent
-  const handleMessageSent = (topic: string, message: any) => {
-    console.log('handleMessageSent called with topic:', topic, 'message:', message);
-    
-    if (onMessageSent) {
-      onMessageSent(topic, message);
-    }
-    
-    // If this is a camera inquiry response, store it
-    if (topic.startsWith('caminq.camera')) {
-      console.log('Found camera inquiry response for topic:', topic);
-      const cameraNumber = parseInt(topic.replace('caminq.camera', ''));
-      console.log('Extracted camera number:', cameraNumber);
-      storeCameraResponse(cameraNumber, message);
-    } else {
-      console.log('Topic does not match caminq.camera pattern:', topic);
-    }
-  };
-
-  const cameraControlPromises = cameraNumbers.map(async (cameraNumber) => {
-    console.log(`\n--- Processing Camera ${cameraNumber} ---`)
-    let settingsApplied = false
-    let retryCount = 0
-
-    while (retryCount < copies && !settingsApplied) {
-      try {
-        // Send color control message
-        const colorControlMessage = {
-          eventName: `colour-control.camera${cameraNumber}`,
-          eventData: {
-            changeexposuremode: "1",
-            exposuremode: "manual",
-            iris: Math.round(settings.iris),
-            exposuregain: Math.round(settings.exposuregain),
-            shutterspeed: Math.round(settings.shutterspeed),
-            brightness: Math.round(settings.brightness)
-          }
-        }
-
-        console.log(`\nAttempt ${retryCount + 1}/${copies} for camera ${cameraNumber}`)
-        console.log('Sending color control:', colorControlMessage)
-        
-        // Store the settings for later verification
-        lastSentSettings[cameraNumber.toString()] = {
-          position: cameraNumber,
-          iris: Math.round(settings.iris),
-          exposuregain: Math.round(settings.exposuregain),
-          shutterspeed: Math.round(settings.shutterspeed),
-          brightness: Math.round(settings.brightness),
-          exposuremode: "manual"
-        };
-        console.log(`Stored settings for camera ${cameraNumber}:`, lastSentSettings[cameraNumber.toString()])
-
-        await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(colorControlMessage)
-        })
-
-        handleMessageSent(`colour-control.camera${cameraNumber}`, colorControlMessage.eventData)
-
-        // Send inquiry message
-        const inquiryMessage = {
-          eventName: `ptzcontrol.camera${cameraNumber}`,
-          eventData: {
-            inqcam: `${cameraNumber}`
-          }
-        }
-
-        await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(inquiryMessage)
-        })
-
-        handleMessageSent(`ptzcontrol.camera${cameraNumber}`, inquiryMessage.eventData)
-
-        // Wait for response with a longer timeout and polling for camera response
-        console.log('Waiting for camera response...')
-        let waitAttempts = 0
-        const maxWaitAttempts = 10
-        let cameraResponse = null;
-
-        while (waitAttempts < maxWaitAttempts && !cameraResponse) {
-          await new Promise(resolve => setTimeout(resolve, 300)) // 300ms per attempt
-          cameraResponse = cameraResponses[cameraNumber.toString()];
-          console.log(`Wait attempt ${waitAttempts + 1}/${maxWaitAttempts}, cameraResponse:`, cameraResponse)
-          waitAttempts++
-        }
-
-        // Check if settings were applied using the local verification
-        if (cameraResponse) {
-          const localVerified = verifyLocalCameraResponse(cameraNumber, cameraResponse)
-          if (localVerified) {
-            console.log(`✓ Settings confirmed locally for camera ${cameraNumber}`)
-            settingsApplied = true
-            updateStatus(cameraNumber, `Settings applied successfully`);
-          } else {
-            console.log(`✗ Settings not confirmed for camera ${cameraNumber}`)
-            updateStatus(cameraNumber, `Settings not confirmed (Attempt ${retryCount + 1}/${copies})`);
-            await new Promise(resolve => setTimeout(resolve, 100))
-          }
+  while (retryCount < copies && !settingsApplied) {
+    try {
+      console.log(`\nAttempt ${retryCount + 1}/${copies} for camera ${cameraNumber}`)
+      
+      // Store settings for verification
+      storeSettingsForVerification(cameraNumber, settings);
+      
+      // Send control messages
+      await sendColorControlMessage(cameraNumber, settings, url, headers, onMessageSent);
+      await sendInquiryMessage(cameraNumber, url, headers, onMessageSent);
+      
+      // Wait for and verify response
+      const cameraResponse = await waitForCameraResponse(cameraNumber);
+      
+      if (cameraResponse) {
+        const localVerified = verifyLocalCameraResponse(cameraNumber, cameraResponse)
+        if (localVerified) {
+          console.log(`✓ Settings confirmed locally for camera ${cameraNumber}`)
+          settingsApplied = true
+          updateStatus(cameraNumber, `Settings applied successfully`);
         } else {
-          console.warn(`No camera response received for camera ${cameraNumber} after ${maxWaitAttempts} attempts`)
-          updateStatus(cameraNumber, `No response from Camera ${cameraNumber} (Attempt ${retryCount + 1}/${copies})`);
+          console.log(`✗ Settings not confirmed for camera ${cameraNumber}`)
+          updateStatus(cameraNumber, `Settings not confirmed (Attempt ${retryCount + 1}/${copies})`);
+          await new Promise(resolve => setTimeout(resolve, 100))
         }
-
-        retryCount++
-      } catch (error) {
-        console.error(`Error in attempt ${retryCount + 1}:`, error)
-        retryCount++
+      } else {
+        console.warn(`No camera response received for camera ${cameraNumber}`)
+        updateStatus(cameraNumber, `No response from Camera ${cameraNumber} (Attempt ${retryCount + 1}/${copies})`);
       }
+      
+      retryCount++
+    } catch (error) {
+      console.error(`Error in attempt ${retryCount + 1}:`, error)
+      retryCount++
     }
+  }
 
-    // Final status update
-    if (!settingsApplied) {
-      updateStatus(cameraNumber, `Failed to apply settings after ${copies} attempts`);
+  // Final status update
+  if (!settingsApplied) {
+    updateStatus(cameraNumber, `Failed to apply settings after ${copies} attempts`);
+  }
+}
+
+function storeSettingsForVerification(cameraNumber: number, settings: CameraSettings) {
+  lastSentSettings[cameraNumber.toString()] = {
+    position: cameraNumber,
+    iris: Math.round(settings.iris),
+    exposuregain: Math.round(settings.exposuregain),
+    shutterspeed: Math.round(settings.shutterspeed),
+    brightness: Math.round(settings.brightness),
+    exposuremode: "manual"
+  };
+  console.log(`Stored settings for camera ${cameraNumber}:`, lastSentSettings[cameraNumber.toString()])
+}
+
+async function sendColorControlMessage(
+  cameraNumber: number, 
+  settings: CameraSettings, 
+  url: string, 
+  headers: Headers,
+  onMessageSent?: (topic: string, message: any) => void
+) {
+  const colorControlMessage = {
+    eventName: `colour-control.camera${cameraNumber}`,
+    eventData: {
+      changeexposuremode: "1",
+      exposuremode: "manual",
+      whitebalancemode: "manual",
+      wbcbgain: "54",
+      wbcrgain: "54",
+      iris: Math.round(settings.iris),
+      exposuregain: Math.round(settings.exposuregain),
+      shutterspeed: Math.round(settings.shutterspeed),
+      brightness: Math.round(settings.brightness)
     }
+  }
+
+  console.log('Sending color control:', colorControlMessage)
+  
+  await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(colorControlMessage)
   })
 
-  await Promise.all(cameraControlPromises)
-  // console.log('=== Camera Control Sequence Completed ===')
+  if (onMessageSent) {
+    onMessageSent(`colour-control.camera${cameraNumber}`, colorControlMessage.eventData)
+  }
+}
+
+async function sendInquiryMessage(
+  cameraNumber: number, 
+  url: string, 
+  headers: Headers,
+  onMessageSent?: (topic: string, message: any) => void
+) {
+  const inquiryMessage = {
+    eventName: `ptzcontrol.camera${cameraNumber}`,
+    eventData: {
+      inqcam: `${cameraNumber}`
+    }
+  }
+
+  await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(inquiryMessage)
+  })
+
+  if (onMessageSent) {
+    onMessageSent(`ptzcontrol.camera${cameraNumber}`, inquiryMessage.eventData)
+  }
+}
+
+async function waitForCameraResponse(cameraNumber: number) {
+  console.log('Waiting for camera response...')
+  let waitAttempts = 0
+  const maxWaitAttempts = 5
+  let cameraResponse = null;
+
+  while (waitAttempts < maxWaitAttempts && !cameraResponse) {
+    await new Promise(resolve => setTimeout(resolve, 300)) // 300ms per attempt
+    cameraResponse = cameraResponses[cameraNumber.toString()];
+    console.log(`Wait attempt ${waitAttempts + 1}/${maxWaitAttempts}, cameraResponse:`, cameraResponse)
+    waitAttempts++
+  }
+  
+  return cameraResponse;
 }
 
 async function checkCurrentSettings(cameraNumber: number, desiredSettings: CameraSettings): Promise<boolean> {

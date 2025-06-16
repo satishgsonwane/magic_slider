@@ -1,12 +1,15 @@
 {
-  "name": "my-v0-project",
+  "name": "magic-slider",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
+    "clean": "rm -rf .next"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
